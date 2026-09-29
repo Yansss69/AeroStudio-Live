@@ -1,46 +1,321 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/activity_main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:gravity="center"
     android:orientation="vertical"
-    android:background="@color/white"
-    >
+    android:background="#18181B"
+    android:padding="4dp">
 
-  <TextView
-      android:id="@+id/tv_version"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:textColor="@color/appColor"
-      android:textSize="12sp"
-      android:layout_marginTop="@dimen/grid_2"
-      android:layout_marginLeft="@dimen/grid_2"
-      android:layout_marginRight="@dimen/grid_2"
-      />
-  <TextView
-      android:id="@+id/tv_select"
-      android:layout_width="wrap_content"
-      android:layout_height="wrap_content"
-      android:layout_marginTop="@dimen/grid_2"
-      android:layout_marginLeft="@dimen/grid_2"
-      android:layout_marginRight="@dimen/grid_2"
-      android:text="@string/tv_select"
-      android:textColor="@color/appColor"
-      android:textSize="22sp"
-      />
+    <!-- 1. TOP BAR: Status Bar (Bitrate, FPS, Durasi, Status Server) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:background="#26262B"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="10dp">
 
-  <GridView
-      android:id="@+id/list"
-      android:layout_width="match_parent"
-      android:layout_height="match_parent"
-      android:layout_marginTop="@dimen/grid_1"
-      android:columnWidth="40dp"
-      android:gravity="center"
-      android:horizontalSpacing="@dimen/grid_2"
-      android:numColumns="2"
-      android:padding="@dimen/grid_2"
-      android:stretchMode="columnWidth"
-      android:verticalSpacing="@dimen/grid_2"
-      />
+        <TextView
+            android:id="@+id/tvLiveIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="● OFFLINE"
+            android:textColor="#71717A"
+            android:textStyle="bold"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="00:00:00"
+            android:textColor="#E4E4E7"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvFps"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="FPS: 0"
+            android:textColor="#A1A1AA"
+            android:textSize="11sp" />
+
+        <TextView
+            android:id="@+id/tvBitrate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="0 kbps"
+            android:textColor="#A1A1AA"
+            android:textSize="11sp" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <ImageButton
+            android:id="@+id/btnFlipCamera"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:background="?selectableItemBackground"
+            android:src="@android:drawable/ic_menu_rotate"
+            android:contentDescription="Flip Camera" />
+    </LinearLayout>
+
+    <!-- 2. MIDDLE AREA: Dual Frame Canvas (Preview vs Program) -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:layout_marginVertical="4dp">
+
+        <!-- Preview Box (Kiri) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#09090B">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PREVIEW"
+                android:textColor="#22C55E"
+                android:textStyle="bold"
+                android:textSize="10sp"
+                android:layout_margin="6dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="Scene Setup Canvas"
+                android:textColor="#3F3F46"
+                android:textSize="12sp" />
+        </FrameLayout>
+
+        <!-- Tombol Transisi Tengah -->
+        <LinearLayout
+            android:layout_width="72dp"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:paddingHorizontal="4dp">
+
+            <Button
+                android:id="@+id/btnCut"
+                android:layout_width="match_parent"
+                android:layout_height="32dp"
+                android:text="CUT"
+                android:textSize="10sp"
+                android:backgroundTint="#3F3F46"
+                android:textColor="#FFFFFF" />
+
+            <Button
+                android:id="@+id/btnFade"
+                android:layout_width="match_parent"
+                android:layout_height="32dp"
+                android:layout_marginTop="6dp"
+                android:text="FADE"
+                android:textSize="10sp"
+                android:backgroundTint="#3F3F46"
+                android:textColor="#FFFFFF" />
+        </LinearLayout>
+
+        <!-- Program Canvas / Live Output (Kanan) -->
+        <FrameLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#09090B">
+
+            <!-- OpenGL View dari Core Engine -->
+            <com.pedro.library.view.OpenGlView
+                android:id="@+id/liveGlView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PROGRAM (LIVE)"
+                android:textColor="#EF4444"
+                android:textStyle="bold"
+                android:textSize="10sp"
+                android:layout_margin="6dp" />
+        </FrameLayout>
+    </LinearLayout>
+
+    <!-- 3. BOTTOM CONTROLS DOCK: Scenes, Sources, Mixer, Output -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="125dp"
+        android:orientation="horizontal"
+        android:background="#26262B"
+        android:padding="6dp">
+
+        <!-- DOCK 1: SCENES -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:padding="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SCENES"
+                android:textColor="#A1A1AA"
+                android:textStyle="bold"
+                android:textSize="10sp" />
+
+            <ListView
+                android:id="@+id/lvScenes"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="#18181B"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- DOCK 2: SOURCES -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.2"
+            android:orientation="vertical"
+            android:padding="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SOURCES"
+                android:textColor="#A1A1AA"
+                android:textStyle="bold"
+                android:textSize="10sp" />
+
+            <ListView
+                android:id="@+id/lvSources"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="#18181B"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- DOCK 3: AUDIO MIXER -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.2"
+            android:orientation="vertical"
+            android:padding="2dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AUDIO MIXER"
+                android:textColor="#A1A1AA"
+                android:textStyle="bold"
+                android:textSize="10sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="8dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Mic"
+                    android:textColor="#E4E4E7"
+                    android:textSize="10sp" />
+
+                <SeekBar
+                    android:id="@+id/sbMicVolume"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:max="100"
+                    android:progress="80" />
+
+                <ImageButton
+                    android:id="@+id/btnMuteMic"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:background="?selectableItemBackground"
+                    android:src="@android:drawable/stat_notify_chat"
+                    android:contentDescription="Mute Mic" />
+            </LinearLayout>
+
+            <ProgressBar
+                android:id="@+id/pbAudioLevel"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:progress="60"
+                android:progressTint="#22C55E"
+                android:layout_marginTop="6dp" />
+        </LinearLayout>
+
+        <!-- DOCK 4: CONTROLS & STREAM/REC TRIGGER -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.4"
+            android:orientation="vertical"
+            android:padding="2dp">
+
+            <EditText
+                android:id="@+id/etRtmpUrl"
+                android:layout_width="match_parent"
+                android:layout_height="28dp"
+                android:background="#18181B"
+                android:hint="rtmp://server/live/streamkey"
+                android:textColorHint="#52525B"
+                android:textColor="#FFFFFF"
+                android:textSize="10sp"
+                android:paddingHorizontal="6dp"
+                android:singleLine="true" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:layout_marginTop="6dp"
+                android:gravity="center">
+
+                <Button
+                    android:id="@+id/btnRecord"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="START REC"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#3F3F46"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginEnd="3dp" />
+
+                <Button
+                    android:id="@+id/btnStream"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:text="START STREAM"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:backgroundTint="#DC2626"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginStart="3dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
 </LinearLayout>
