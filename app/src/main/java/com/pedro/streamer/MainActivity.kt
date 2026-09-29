@@ -1,158 +1,226 @@
-/*
- * Copyright (C) 2024 pedroSG94.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package com.pedro.streamer
+package com.pedro.rtpstreamer
 
 import android.Manifest
-import android.annotation.SuppressLint
-import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Build.VERSION_CODES
 import android.os.Bundle
-import android.widget.AdapterView.OnItemClickListener
-import android.widget.GridView
-import android.widget.TextView
+import android.os.Environment
+import android.os.Handler
+import android.os.Looper
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
-import com.pedro.streamer.file.FromFileActivity
-import com.pedro.streamer.oldapi.OldApiActivity
-import com.pedro.streamer.rotation.RotationActivity
-import com.pedro.streamer.screen.ScreenActivity
-import com.pedro.streamer.utils.ActivityLink
-import com.pedro.streamer.utils.ImageAdapter
-import com.pedro.streamer.utils.fitAppPadding
-import com.pedro.streamer.utils.toast
+import androidx.core.content.ContextCompat
+import com.pedro.common.ConnectChecker
+import com.pedro.library.rtmp.RtmpCamera2
+import com.pedro.library.view.OpenGlView
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), ConnectChecker {
 
-  private lateinit var list: GridView
-  private val activities: MutableList<ActivityLink> = mutableListOf()
+    private lateinit var liveGlView: OpenGlView
+    private lateinit var btnStream: Button
+    private lateinit var btnRecord: Button
+    private lateinit var btnFlipCamera: ImageButton
+    private lateinit var btnMuteMic: ImageButton
+    private lateinit var etRtmpUrl: EditText
+    private lateinit var tvLiveIndicator: TextView
+    private lateinit var tvBitrate: TextView
+    private lateinit var tvFps: TextView
+    private lateinit var tvDuration: TextView
+    private lateinit var sbMicVolume: SeekBar
 
-  private val permissions = mutableListOf(
-    Manifest.permission.RECORD_AUDIO, Manifest.permission.CAMERA,
-  ).apply {
-    if (Build.VERSION.SDK_INT >= VERSION_CODES.TIRAMISU) {
-      this.add(Manifest.permission.POST_NOTIFICATIONS)
-    }
-    if (Build.VERSION.SDK_INT >= VERSION_CODES.CINNAMON_BUN) {
-      this.add(Manifest.permission.ACCESS_LOCAL_NETWORK)
-    }
-  }.toTypedArray()
+    private var rtmpCamera: RtmpCamera2? = null
+    private var isRecording = false
+    private var recordPath = ""
+    private var streamStartTime = 0L
+    private val timerHandler = Handler(Looper.getMainLooper())
 
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-    setContentView(R.layout.activity_main)
-    fitAppPadding()
-    transitionAnim(true)
-    val tvVersion = findViewById<TextView>(R.id.tv_version)
-    tvVersion.text = getString(R.string.version, BuildConfig.VERSION_NAME)
-    list = findViewById(R.id.list)
-    createList()
-    setListAdapter(activities)
-    requestPermissions()
-  }
-
-  @Suppress("DEPRECATION")
-  private fun transitionAnim(isOpen: Boolean) {
-    if (Build.VERSION.SDK_INT >= VERSION_CODES.UPSIDE_DOWN_CAKE) {
-      val type = if (isOpen) OVERRIDE_TRANSITION_OPEN else OVERRIDE_TRANSITION_CLOSE
-      overrideActivityTransition(type, R.anim.slide_in, R.anim.slide_out)
-    } else {
-      overridePendingTransition(R.anim.slide_in, R.anim.slide_out)
-    }
-  }
-
-  private fun requestPermissions() {
-    if (!hasPermissions(this)) {
-      ActivityCompat.requestPermissions(this, permissions, 1)
-    }
-  }
-
-  @SuppressLint("NewApi")
-  private fun createList() {
-    activities.add(
-      ActivityLink(
-        Intent(this, OldApiActivity::class.java),
-        getString(R.string.old_api), VERSION_CODES.JELLY_BEAN
-      )
+    private val permissions = arrayOf(
+        Manifest.permission.CAMERA,
+        Manifest.permission.RECORD_AUDIO
     )
-    activities.add(
-      ActivityLink(
-        Intent(this, FromFileActivity::class.java),
-        getString(R.string.from_file), VERSION_CODES.JELLY_BEAN_MR2
-      )
-    )
-    activities.add(
-      ActivityLink(
-        Intent(this, ScreenActivity::class.java),
-        getString(R.string.display), VERSION_CODES.LOLLIPOP
-      )
-    )
-    activities.add(
-      ActivityLink(
-        Intent(this, RotationActivity::class.java),
-        getString(R.string.rotation_rtmp), VERSION_CODES.LOLLIPOP
-      )
-    )
-  }
 
-  private fun setListAdapter(activities: List<ActivityLink>) {
-    list.adapter = ImageAdapter(activities)
-    list.onItemClickListener =
-      OnItemClickListener { _, _, position, _ ->
-        if (hasPermissions(this)) {
-          val link = activities[position]
-          val minSdk = link.minSdk
-          if (Build.VERSION.SDK_INT >= minSdk) {
-            startActivity(link.intent)
-            transitionAnim(false)
-          } else {
-            showMinSdkError(minSdk)
-          }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        initViews()
+        initCamera()
+        setupListeners()
+    }
+
+    private fun initViews() {
+        liveGlView = findViewById(R.id.liveGlView)
+        btnStream = findViewById(R.id.btnStream)
+        btnRecord = findViewById(R.id.btnRecord)
+        btnFlipCamera = findViewById(R.id.btnFlipCamera)
+        btnMuteMic = findViewById(R.id.btnMuteMic)
+        etRtmpUrl = findViewById(R.id.etRtmpUrl)
+        tvLiveIndicator = findViewById(R.id.tvLiveIndicator)
+        tvBitrate = findViewById(R.id.tvBitrate)
+        tvFps = findViewById(R.id.tvFps)
+        tvDuration = findViewById(R.id.tvDuration)
+        sbMicVolume = findViewById(R.id.sbMicVolume)
+
+        // Mock Scene & Source List
+        val lvScenes = findViewById<ListView>(R.id.lvScenes)
+        val lvSources = findViewById<ListView>(R.id.lvSources)
+        lvScenes.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, arrayOf("Main Scene", "IRL Camera", "Drone Cam"))
+        lvSources.adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, arrayOf("Camera Input", "Overlay Logo", "Mic Audio"))
+    }
+
+    private fun initCamera() {
+        rtmpCamera = RtmpCamera2(liveGlView, this)
+        if (hasPermissions()) {
+            startPreview()
         } else {
-          showPermissionsErrorAndRequest()
+            ActivityCompat.requestPermissions(this, permissions, 100)
         }
-      }
-  }
-
-  private fun showMinSdkError(minSdk: Int) {
-    val named: String = when (minSdk) {
-      VERSION_CODES.JELLY_BEAN_MR2 -> "JELLY_BEAN_MR2"
-      VERSION_CODES.LOLLIPOP -> "LOLLIPOP"
-      else -> "JELLY_BEAN"
     }
-    toast("You need min Android $named (API $minSdk)")
-  }
 
-  private fun showPermissionsErrorAndRequest() {
-    toast("You need permissions before")
-    requestPermissions()
-  }
-
-  private fun hasPermissions(context: Context): Boolean {
-    if (Build.VERSION.SDK_INT >= VERSION_CODES.M) {
-      for (permission in permissions) {
-        if (ActivityCompat.checkSelfPermission(context, permission)
-          != PackageManager.PERMISSION_GRANTED
-        ) {
-          return false
+    private fun startPreview() {
+        if (rtmpCamera?.isOnPreview == false) {
+            rtmpCamera?.startPreview(1280, 720)
         }
-      }
     }
-    return true
-  }
+
+    private fun setupListeners() {
+        btnFlipCamera.setOnClickListener {
+            try {
+                rtmpCamera?.switchCamera()
+            } catch (e: Exception) {
+                Toast.makeText(this, "Tidak dapat menukar kamera", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        btnMuteMic.setOnClickListener {
+            rtmpCamera?.let {
+                if (it.isAudioMuted) {
+                    it.unMuteAudio()
+                    Toast.makeText(this, "Microphone Aktif", Toast.LENGTH_SHORT).show()
+                } else {
+                    it.muteAudio()
+                    Toast.makeText(this, "Microphone Dimute", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        btnStream.setOnClickListener {
+            val url = etRtmpUrl.text.toString().trim()
+            if (url.isEmpty()) {
+                Toast.makeText(this, "Masukkan URL RTMP Server", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            rtmpCamera?.let { camera ->
+                if (!camera.isStreaming) {
+                    if (camera.prepareAudio() && camera.prepareVideo(1280, 720, 30, 2500 * 1024, 0)) {
+                        camera.startStream(url)
+                        btnStream.text = "STOP STREAM"
+                        btnStream.setBackgroundColor(0xFF27272A.toInt())
+                        tvLiveIndicator.text = "● LIVE"
+                        tvLiveIndicator.setTextColor(0xFFEF4444.toInt())
+                        startTimer()
+                    } else {
+                        Toast.makeText(this, "Gagal menginisialisasi hardware encoder", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    camera.stopStream()
+                    btnStream.text = "START STREAM"
+                    btnStream.setBackgroundColor(0xFFDC2626.toInt())
+                    tvLiveIndicator.text = "● OFFLINE"
+                    tvLiveIndicator.setTextColor(0xFF71717A.toInt())
+                    stopTimer()
+                }
+            }
+        }
+
+        btnRecord.setOnClickListener {
+            rtmpCamera?.let { camera ->
+                if (!isRecording) {
+                    val folder = getExternalFilesDir(Environment.DIRECTORY_MOVIES)
+                    val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                    val file = File(folder, "AERO_$timeStamp.mp4")
+                    recordPath = file.absolutePath
+
+                    if (!camera.isStreaming) {
+                        if (!camera.prepareAudio() || !camera.prepareVideo(1280, 720, 30, 2500 * 1024, 0)) {
+                            Toast.makeText(this, "Gagal menyiapkan encoder rekaman", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                    }
+                    camera.startRecord(recordPath)
+                    isRecording = true
+                    btnRecord.text = "STOP REC"
+                    btnRecord.setBackgroundColor(0xFFDC2626.toInt())
+                    Toast.makeText(this, "Merekam ke memori...", Toast.LENGTH_SHORT).show()
+                } else {
+                    camera.stopRecord()
+                    isRecording = false
+                    btnRecord.text = "START REC"
+                    btnRecord.setBackgroundColor(0xFF3F3F46.toInt())
+                    Toast.makeText(this, "Tersimpan: $recordPath", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun startTimer() {
+        streamStartTime = System.currentTimeMillis()
+        timerHandler.post(object : Runnable {
+            override fun run() {
+                val millis = System.currentTimeMillis() - streamStartTime
+                val seconds = (millis / 1000) % 60
+                val minutes = (millis / (1000 * 60)) % 60
+                val hours = (millis / (1000 * 60 * 60))
+                tvDuration.text = String.format("%02d:%02d:%02d", hours, minutes, seconds)
+                timerHandler.postDelayed(this, 1000)
+            }
+        })
+    }
+
+    private fun stopTimer() {
+        timerHandler.removeCallbacksAndMessages(null)
+        tvDuration.text = "00:00:00"
+        tvBitrate.text = "0 kbps"
+    }
+
+    private fun hasPermissions(): Boolean = permissions.all {
+        ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 100 && hasPermissions()) {
+            startPreview()
+        }
+    }
+
+    override fun onConnectionStarted(url: String) {}
+    override fun onConnectionSuccess() {
+        runOnUiThread { Toast.makeText(this, "Siaran Terhubung ke RTMP Server!", Toast.LENGTH_SHORT).show() }
+    }
+    override fun onConnectionFailed(reason: String) {
+        runOnUiThread {
+            Toast.makeText(this, "Gagal: $reason", Toast.LENGTH_SHORT).show()
+            rtmpCamera?.stopStream()
+            btnStream.text = "START STREAM"
+            btnStream.setBackgroundColor(0xFFDC2626.toInt())
+            tvLiveIndicator.text = "● OFFLINE"
+            tvLiveIndicator.setTextColor(0xFF71717A.toInt())
+            stopTimer()
+        }
+    }
+    override fun onNewBitrate(bitrate: Long) {
+        runOnUiThread { tvBitrate.text = "${bitrate / 1000} kbps" }
+    }
+    override fun onDisconnect() {
+        runOnUiThread { Toast.makeText(this, "Siaran Terputus", Toast.LENGTH_SHORT).show() }
+    }
+    override fun onAuthError() {
+        runOnUiThread { Toast.makeText(this, "Autentikasi Ditolak", Toast.LENGTH_SHORT).show() }
+    }
+    override fun onAuthSuccess() {}
 }
